@@ -130,9 +130,9 @@ def build_tree(root, pmax, step, kmax, lmax, depth):
 					normnew = actions.eliminate(normnew) #eliminate duplicates
 					normnew = actions.absorb_weaker(normnew) #absorb the weaker norms by stronger ones
 					normnew = sorted(normnew) #sort for consistency
-					if normnew not in visited:
-						visited.append(normnew) #if not yet visited
-						normnode = TreeNode(normnew) #mark as visited
+					if normnew not in visited: #if not yet visited
+						visited.append(normnew) #mark as visited
+						normnode = TreeNode(normnew) 
 						parent.add_child(normnode) #add as child
 						stack.append(normnode)
 
