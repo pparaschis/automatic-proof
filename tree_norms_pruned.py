@@ -50,7 +50,7 @@ def build_tree(root, pmax, step, kmax, lmax, depth):
 
 	prange = np.arange(pinit, pmax + step, step) #Range of p-values for Holder exponents
 	stack = [root] #Stack for depth-first traversal
-	visited = [] #List of visited norm-sets to avoid duplicates
+	visited = set() #Set of visited norm-sets to avoid duplicates
 	
 	while stack:
 		parent = stack.pop() #Get the next node to process
@@ -68,6 +68,7 @@ def build_tree(root, pmax, step, kmax, lmax, depth):
 		
 		if MakeLeaf:
 			ParentHitMaxReg = True
+			
 			for s in srange:
 				for r in rrange:
 					
@@ -83,8 +84,10 @@ def build_tree(root, pmax, step, kmax, lmax, depth):
 				
 					#define the new upper bound based on the max regularities
 					normnew = [[("('u', 0)*('1', 0)", 0, k, p), ("('v', 0)*('1', 0)", 0, l, q)]]
-					if parent.isleaf == False and normnew not in visited:
-						visited.append(normnew) #mark as visited
+					normnew_tuple = tuple(tuple(item) for item in normnew) #convert to tuple of tuples for set operations
+					
+					if parent.isleaf == False and normnew_tuple not in visited:
+						visited.add(normnew_tuple)
 						normleaf = TreeNode(normnew)
 						parent.add_child(normleaf)
 						stack.append(normleaf) #add to stack for further processing
@@ -110,7 +113,6 @@ def build_tree(root, pmax, step, kmax, lmax, depth):
 	
 		
 	
-	
 		for i in range(len(parent.data)): #iterate over all terms in the sum of norms
 	
 			tup0 = Norm(parent.data[i][0])
@@ -130,8 +132,9 @@ def build_tree(root, pmax, step, kmax, lmax, depth):
 					normnew = actions.eliminate(normnew) #eliminate duplicates
 					normnew = actions.absorb_weaker(normnew) #absorb the weaker norms by stronger ones
 					normnew = sorted(normnew) #sort for consistency
-					if normnew not in visited: #if not yet visited
-						visited.append(normnew) #mark as visited
+					normnew_tuple = tuple(tuple(tuple(x) for x in row) for row in normnew)
+					if normnew_tuple not in visited: #if not yet visited
+						visited.add(normnew_tuple) #mark as visited
 						normnode = TreeNode(normnew) 
 						parent.add_child(normnode) #add as child
 						stack.append(normnode)
@@ -169,8 +172,9 @@ def build_tree(root, pmax, step, kmax, lmax, depth):
 					normnew = actions.eliminate(normnew)
 					normnew = actions.absorb_weaker(normnew)
 					normnew = sorted(normnew)
-					if normnew not in visited: #same as above
-						visited.append(normnew) 
+					normnew_tuple = tuple(tuple(tuple(x) for x in row) for row in normnew)
+					if normnew_tuple not in visited: 
+						visited.add(normnew_tuple)
 						normnode = TreeNode(normnew)
 						parent.add_child(normnode) 
 						stack.append(normnode)
@@ -182,8 +186,9 @@ def build_tree(root, pmax, step, kmax, lmax, depth):
 					normnew = actions.eliminate(normnew)
 					normnew = actions.absorb_weaker(normnew)
 					normnew = sorted(normnew)
-					if normnew not in visited:
-						visited.append(normnew)
+					normnew_tuple = tuple(tuple(tuple(x) for x in row) for row in normnew)
+					if normnew_tuple not in visited: 
+						visited.add(normnew_tuple)
 						normnode = TreeNode(normnew)
 						parent.add_child(normnode)
 						stack.append(normnode)
@@ -195,12 +200,12 @@ def build_tree(root, pmax, step, kmax, lmax, depth):
 					normnew = actions.eliminate(normnew)
 					normnew = actions.absorb_weaker(normnew)
 					normnew = sorted(normnew)
-					if normnew not in visited:
-						visited.append(normnew)
+					normnew_tuple = tuple(tuple(tuple(x) for x in row) for row in normnew)
+					if normnew_tuple not in visited: 
+						visited.add(normnew_tuple)
 						normnode = TreeNode(normnew)
 						parent.add_child(normnode)
 						stack.append(normnode)
-		
 			
 			
 	
@@ -220,8 +225,11 @@ norms = sorted(norms)
 kmax = 2; lmax = 2; step = 1
 
 root = TreeNode(norms); depth = math.inf
+
+import time
+t1 = time.time()
 build_tree(root, pmax, step, kmax, lmax, depth)
-	
+t2 = time.time(); print("Time taken: {time} seconds".format(time = t2 - t1))
 					
 	
 		
