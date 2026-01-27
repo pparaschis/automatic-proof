@@ -45,11 +45,11 @@ def build_tree(root, pmax, step, kmax, lmax, depth):
 	lmax: Maximal regularity in v
 	depth: Maximum depth of the tree
 
-	Builds a tree of norm bounds using depth-first traversal and prunes branches that reach maximal regularity.
+	Builds a tree of norm bounds using depth-first search and prunes branches that reach maximal regularity.
 	'''
 
 	prange = np.arange(pinit, pmax + step, step) #Range of p-values for Holder exponents
-	stack = [root] #Stack for depth-first traversal
+	stack = [root] #Stack for depth-first search
 	visited = set() #Set of visited norm-sets to avoid duplicates
 	
 	while stack:
@@ -142,6 +142,7 @@ def build_tree(root, pmax, step, kmax, lmax, depth):
 
 					
 					#The following does the same w.r.t. v - commented out for now (possibly needs correction too)
+
 					'''
 					p, pstar = actions.HolderExponent(tup0.lbsg, p)
 					if abs(tup0.lbsg - pstar) > 0.5*step:
@@ -206,9 +207,7 @@ def build_tree(root, pmax, step, kmax, lmax, depth):
 						normnode = TreeNode(normnew)
 						parent.add_child(normnode)
 						stack.append(normnode)
-			
-			
-	
+
 		
 #Example: Find upper bounds for \|uv\|_{H^1}
 funcs = "('u', 0)*('v', 0)"
@@ -222,16 +221,10 @@ print(" ")
 
 norms = sorted(norms)
 
-kmax = 2; lmax = 2; step = 1
+kmax = 1; lmax = 1; step = 1
 
 root = TreeNode(norms); depth = math.inf
-
-import time
-t1 = time.time()
 build_tree(root, pmax, step, kmax, lmax, depth)
-t2 = time.time(); print("Time taken: {time} seconds".format(time = t2 - t1))
-					
-	
 		
 		
 				
