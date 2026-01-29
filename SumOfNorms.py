@@ -2,7 +2,7 @@ import math
 import actions
 import numpy as np
 from collections import deque
-from ast import literal_eval as make_tuple
+from ast import literal_eval
 
 #Just converting the norm tuples into a latex-type string for display purposes - nothing interesting here
 
@@ -27,11 +27,11 @@ def sum_of_norms(norms):
 	sblv1 = tup1.sblv; sblv2 = tup2.sblv
 	
 	splits1 = tup1.fncs.split("*")
-	FuncData11 = make_tuple(splits1[0]); FuncData12 = make_tuple(splits1[1])
+	FuncData11 = literal_eval(splits1[0]); FuncData12 = literal_eval(splits1[1])
 	ord11 = FuncData11[1]; ord12 = FuncData12[1]
 	
 	splits2 = tup2.fncs.split("*")
-	FuncData21 = make_tuple(splits2[0]); FuncData22 = make_tuple(splits2[1])
+	FuncData21 = literal_eval(splits2[0]); FuncData22 = literal_eval(splits2[1])
 	ord21 = FuncData21[1]; ord22 = FuncData22[1]
 	
 	upart = "{u}".format(u = FuncData11[0]) + "^{{({ord11})}}".format(ord11 = ord11)
@@ -124,11 +124,11 @@ def sum_of_norms(norms):
 		sblv1 = tup1.sblv; sblv2 = tup2.sblv
 	
 		splits1 = tup1.fncs.split("*")
-		FuncData11 = make_tuple(splits1[0]); FuncData12 = make_tuple(splits1[1])
+		FuncData11 = literal_eval(splits1[0]); FuncData12 = literal_eval(splits1[1])
 		ord11 = FuncData11[1]; ord12 = FuncData12[1]
 	
 		splits2 = tup2.fncs.split("*")
-		FuncData21 = make_tuple(splits2[0]); FuncData22 = make_tuple(splits2[1])
+		FuncData21 = literal_eval(splits2[0]); FuncData22 = literal_eval(splits2[1])
 		ord21 = FuncData21[1]; ord22 = FuncData22[1]
 	
 		upart = "{u}".format(u = FuncData11[0]) + "^{{({ord11})}}".format(ord11 = ord11)
