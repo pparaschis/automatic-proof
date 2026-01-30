@@ -233,12 +233,8 @@ norms = sorted(norms)
 
 kmax = 2; lmax = 2; step = 1
 
-import time
-t1 = time.time()
 root = TreeNode(norms); depth = math.inf
 build_tree(root, pmax, step, kmax, lmax, depth)
-t2 = time.time()
-print("Time taken: {time} seconds".format(time = t2 - t1))
 		
 		
 				
