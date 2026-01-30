@@ -212,11 +212,7 @@ def build_tree(root, pmax, step, kmax, lmax, depth):
                         parent.add_child(normnode)
                         queue.append(normnode)
 
-        if parent.nchildren == 0: 
-            parent.isleaf = True
-			#splitted, nonsplitted = actions.sortHolder(parent.data)
-			#if len(nonsplitted) > 0:
-			#	print(parent.data); input()
+        if parent.nchildren == 0: parent.isleaf = True
 
 		
 #Example: Find upper bounds for \|uv\|_{H^1}
