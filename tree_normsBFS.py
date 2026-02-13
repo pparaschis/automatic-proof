@@ -4,45 +4,58 @@ import numpy as np
 from SumOfNorms import sum_of_norms
 from ast import literal_eval
 from collections import deque
+import time
+import psutil
+
+
+#Memory-based stopping criterion - can be skipped if RAM is large enough
+proc = psutil.Process()
+THRESHOLD = 3 * 1024**3  # 3 GB
+
 
 
 class TreeNode:
 
-	#Initialize the node with data and an empty list of children
-	def __init__(self, data):
-		self.data = data
-		self.children = []
-		self.nchildren = 0
-		self.ancestors = [self.data]
-		self.isleaf = False
+    #Initialize the node with data and an empty list of children
+    def __init__(self, data):
+        self.data = data
+        self.children = []
+        self.parents = None
+        self.nchildren = 0
+        self.ancestors = [self]
+        self.isleaf = False
 
-	#Add a child node and update its ancestors
-	def add_child(self, child):
-		self.children.append(child)
-		self.nchildren += 1
-		child.ancestors = [anc for anc in self.ancestors] + child.ancestors
+    #Add a child node and update its ancestors
+    def add_child(self, child):
+        self.children.append(child)
+        self.nchildren += 1
+        child.ancestors = [anc for anc in self.ancestors] + child.ancestors
+        child.parents = self
+
         
 class Norm:
-	def __init__(self, tup):
+    def __init__(self, tup):
 
-		#Data of the norm-tuple - stored in a class for convenience
-		self.tup = tup
-		
-		self.fncs = tup[0]
-		self.ordr = tup[1]
-		self.sblv = tup[2]
-		self.lbsg = tup[3]
+        #Data of the norm-tuple - stored as a class for convenience
+        self.tup = tup
+        
+        self.fncs = tup[0]
+        self.ordr = tup[1]
+        self.sblv = tup[2]
+        self.lbsg = tup[3]
     
-	
 		
 		
-def build_tree(root, pmax, step, kmax, lmax, depth):
+def build_tree(root, pinit_u, pmax_u, pinit_v, pmax_v, step, kmax, lmax, depth):
 
     '''
 	Inputs:
 
 	root: Root node of the tree - initial norms to be bounded
-	pmax: Maximum p-value for the Holder exponents
+	pmax_u: Maximum p-value for the Holder exponents w.r.t. u
+    pinit_u: Initial p-value for the Holder exponents w.r.t. u
+	pmax_v: Maximum p-value for the Holder exponents w.r.t. v
+    pinit_v: Initial p-value for the Holder exponents w.r.t. v
 	step: Step size for the p-values
 	kmax: Maximal regularity in u
 	lmax: Maximal regularity in v
@@ -50,28 +63,40 @@ def build_tree(root, pmax, step, kmax, lmax, depth):
 
 	Builds a tree of norm bounds using breadth-first search and prunes branches that reach maximal regularity.
     '''
+
 	
-    prange = np.arange(pinit, pmax + step, step) #Range of p-values for Holder exponents
+    prange_u = np.arange(pinit_u, pmax_u + step, step) #Range of p-values for Holder exponents
     
     queue = deque([root]) #Queue for breadth-first search
+    levels = [[root]]
     visited = set() #Set of visited norm-sets to avoid duplicates
+    leafnodes = set() #Set of leaf nodes
+
+    totalnnodes = 1
 	
     while queue:
         parent = queue.popleft()
-        ParentHitMaxReg = False #Flag to check if parent hit max regularity
 		
 		
         current_depth = len(parent.ancestors) - 1 #Calculate current depth
+        lvl = current_depth + 1
         if current_depth == depth: continue #Stop if max depth reached
 			
-        MakeLeaf, (k1, p1), (l1, q1), (k2, p2), (l2, q2) = actions.CheckRegularity(parent.data, kmax, lmax) #Check regularity
+        MakeLeafReg, MakeLeafHolder, (k1, p1), (l1, q1), (k2, p2), (l2, q2) = actions.CheckRegularity(parent.data, kmax, lmax) #Check regularity
 
-		#Holder exponent ranges for the non-Holdered norms
-        srange = np.arange(max(p2, pinit), max(p2, pmax) + step, step) #Range for first Holder exponent
-        rrange = np.arange(max(q2, pinit), max(q2, pmax) + step, step) #Range for second Holder exponent - the actual exponent will be its dual
+	#Holder exponent ranges for the non-Holdered norms
+        #Range for first Holder exponent
+        srange = np.arange(max(p2, pinit_u), max(p2, pmax_u) + step, step) 
+
+        #Range for second Holder exponent - the actual exponent will be its dual
+        rrange = np.arange(max(q2, pinit_u), max(q2, pmax_u) + step, step) 
+
+        #Range for second Holder exponent - now the inequality is not applied with the dual;
+        #this yields inequalities that would be skipped otherwise
+        trange = np.arange(max(q2, pinit_v), max(q2, pmax_v) + step, step)
 		
-        if MakeLeaf:
-            ParentHitMaxReg = True
+        
+        if MakeLeafReg: #If the node hit maximum regularity
 			
             for s in srange:
                 for r in rrange:
@@ -91,31 +116,199 @@ def build_tree(root, pmax, step, kmax, lmax, depth):
                     normnew_tuple = tuple(tuple(item) for item in normnew) #convert to tuple of tuples for set operations
 					
                     if parent.isleaf == False and normnew_tuple not in visited:
+
+                        LowScore = False
+
+                        #Check if there is any leaf node already proving a better result
+                        for leaf in leafnodes: 
+                            
+                            #If you already found a better one, then stop searching
+                            if LowScore: break
+                            ku = leaf.data[0][0][2]; pu = leaf.data[0][0][3]
+                            lv = leaf.data[0][1][2]; qv = leaf.data[0][1][3]
+
+                            ustronger = False; vstronger = False
+                            if k > ku or (k == ku and p >= pu): ustronger = True
+                            if l > lv or (l == lv and q >= qv): vstronger = True
+
+                            if ustronger and vstronger: LowScore = True
+
+
+                        visited.add(normnew_tuple) #mark as visited
+                        if not LowScore: #if there are not any better leaf nodes, then proceed with this one
+                            normleaf = TreeNode(normnew)
+                            parent.add_child(normleaf)
+                            queue.append(normleaf) #add to queue for further processing
+                            normleaf.isleaf = True #mark as leaf
+                            leafnodes.add(normleaf) #add to leaf nodes set
+                            totalnnodes += 1
+
+                            if len(levels) <= lvl: levels += [[]]
+                            levels[lvl].append(normleaf)
+
+                for t in trange: #same process for the other Holder inequality
+
+                    #sort the parameters for u to get the max regularity
+                    Knew = sorted([(k1, p1), (k2, s)], key = lambda x: (x[0], x[1]))
+                    KPnew = Knew[-1]; k = KPnew[0]; p = KPnew[1]
+				
+					#sort the parameters for v to get the max regularity
+                    Lnew = sorted([(l1, q1), (l2, t)], key = lambda x: (x[0], x[1]))
+                    LQnew = Lnew[-1]; l = LQnew[0]; q = LQnew[1]
+				
+					#define the new upper bound based on the max regularities
+                    normnew = [[("('u', 0)*('1', 0)", 0, k, p), ("('v', 0)*('1', 0)", 0, l, q)]]
+                    normnew_tuple = tuple(tuple(item) for item in normnew) #convert to tuple of tuples for set operations
+					
+                    if parent.isleaf == False and normnew_tuple not in visited:
+
+                        LowScore = False
+                        for leaf in leafnodes: 
+                            ku = leaf.data[0][0][2]; pu = leaf.data[0][0][3]
+                            lv = leaf.data[0][1][2]; qv = leaf.data[0][1][3]
+
+                            ustronger = False; vstronger = False
+                            othercase_u = (k == ku and p >= pu)
+                            othercase_v = (l == lv and q >= qv)
+                            if k > ku or othercase_u: ustronger = True
+                            if l > lv or othercase_v: vstronger = True
+
+                            
+                            if ustronger and vstronger: LowScore = True
+
+                            if LowScore: break
+                        
+
+                        visited.add(normnew_tuple) #mark as visited
+                        if not LowScore:    
+                            normleaf = TreeNode(normnew)
+                            parent.add_child(normleaf)
+                            queue.append(normleaf) #add to queue for further processing
+                            normleaf.isleaf = True #mark as leaf
+                            leafnodes.add(normleaf) #add to leaf nodes set
+                            totalnnodes += 1
+
+                            if len(levels) <= lvl: levels += [[]]
+                            levels[lvl].append(normleaf)
+
+        if MakeLeafHolder: #if all terms are Holder-splitted
+
+            #do the same process as above to create a new leaf node
+            k = k1; p = p1; l = l1; q = q1
+            normnew = [[("('u', 0)*('1', 0)", 0, k, p), ("('v', 0)*('1', 0)", 0, l, q)]]
+            normnew_tuple = tuple(tuple(item) for item in normnew) #convert to tuple of tuples for set operations 
+            if parent.isleaf == False: # and normnew_tuple not in visited:
+                
+            
+                LowScore = False
+                for leaf in leafnodes: 
+                    ku = leaf.data[0][0][2]; pu = leaf.data[0][0][3]
+                    lv = leaf.data[0][1][2]; qv = leaf.data[0][1][3]
+
+                    ustronger = False; vstronger = False
+                    if k > ku or (k == ku and p >= pu): ustronger = True
+                    if l > lv or (l == lv and q >= qv): vstronger = True
+
+                    if ustronger and vstronger: LowScore = True
+                    if LowScore: break
+
+                if LowScore: visited.add(normnew_tuple)
+
+                #visited.add(normnew_tuple) #mark as visited
+                if not LowScore:
+                    if normnew_tuple not in visited:
                         visited.add(normnew_tuple)
                         normleaf = TreeNode(normnew)
                         parent.add_child(normleaf)
                         queue.append(normleaf) #add to queue for further processing
                         normleaf.isleaf = True #mark as leaf
+                        leafnodes.add(normleaf) #add to leaf nodes set
+                        totalnnodes += 1
+
+                        if len(levels) <= lvl: levels += [[]]
+                        levels[lvl].append(normleaf)
+                    else: #this one covers the case where the sum of norms contains just one term
+                        parent_tuple = tuple(tuple(item) for item in parent.data)
+                        visited.add(parent_tuple)
+                        parent.isleaf = True #mark as leaf
+                        leafnodes.add(parent) #add to leaf nodes set  
+
+                       
 						
 		
 		
         if parent.isleaf:
 
-			#Print the proof for the leaf node kind of in latex format
+	    #Print the proof for the leaf node kind of in latex format
 		
 			
             print(" ")
             print("Proof complete!")
-            print("{anc}".format(anc = sum_of_norms(parent.ancestors[0])))
+            print("{anc}".format(anc = sum_of_norms(parent.ancestors[0].data)))
             for i in range(1, len(parent.ancestors)):
-                print("    \\leq {ancestor}".format(ancestor = sum_of_norms(parent.ancestors[i])))
+                print("    \\leq {ancestor}".format(ancestor = sum_of_norms(parent.ancestors[i].data)))
 			
             print(" ")
 			
 			
             continue 
-	
-		
+
+        else:
+
+            #If the node is not in a terminal state, then compare it once more with the leafs,
+            #in case new weaker ones where created on the same level after this one
+            #if so, then don't expand it further
+            LowScore = False
+            Holder_u_low = False; Holder_v_low = False
+            nonHolder_u_low = False; nonHolder_v_low = False
+
+            #compare with the nodes of the same depth
+            if len(levels) <= lvl: levels += [[]]
+            
+            for node in levels[lvl]: 
+                if node in parent.ancestors: continue
+                
+                #Get maximum regularities of both
+                (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(node.data)
+
+                if k1 > kh or (kh == k1 and p1 >= ph): Holder_u_low = True
+                if l1 > lh or (lh == l1 and q1 >= qh): Holder_v_low = True
+                if k2 > kn or (kn == k2 and p2 >= pn): nonHolder_u_low = True
+                if l2 > ln or (ln == l2 and q2 >= qn): nonHolder_v_low = True
+
+                #if the current node has stronger regularity than the other one,
+                #then it has a lower score
+                if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
+                    LowScore = True
+                    break
+
+            for leaf in leafnodes: 
+                if LowScore: break
+                ku = leaf.data[0][0][2]; pu = leaf.data[0][0][3]
+                lv = leaf.data[0][1][2]; qv = leaf.data[0][1][3]
+
+                ustronger = False; vstronger = False
+                if k1 > ku or (k1 == ku and p1 >= pu): ustronger = True #edw if k1 > ku: ustronger = True etc.
+                if l1 > lv or (l1 == lv and q1 >= qv): vstronger = True
+
+                if k2 > ku or (k2 == ku and p2 >= pu): ustronger = True
+                if l2 > lv or (l2 == lv and q2 >= qv): vstronger = True
+
+                if ustronger and vstronger: LowScore = True
+
+            if LowScore: 
+
+                #if the node has a low score, delete it
+                #also, delete the ancestors leading only to this node
+                ancestors_rev = parent.ancestors
+                ancestors_rev.reverse()
+                for anc in ancestors_rev:
+                    if anc.nchildren > 0: break
+                    anc.parents.children.remove(anc)
+                    anc.parents.nchildren -= 1
+                    totalnnodes -= 1
+                continue
+
 	
         for i in range(len(parent.data)): #iterate over all terms in the sum of norms
 	
@@ -125,40 +318,141 @@ def build_tree(root, pmax, step, kmax, lmax, depth):
             FuncData01 = literal_eval(splits0[0]); FuncData02 = literal_eval(splits0[1])
             ord01 = FuncData01[1]; ord02 = FuncData02[1] #orders of the individual functions
 			
-			#If Holder's inequality has not yet been applied to this norm
-			#and if the norm is not yet at maximal regularity
-            if FuncData02[0] != '1' and abs(tup0.ordr + tup0.sblv) == 0 and parent.isleaf == False and ParentHitMaxReg == False: 
-                prange = np.arange(max(pinit, tup0.lbsg), max(pmax, tup0.lbsg) + step, step)
+            #If Holder's inequality has not yet been applied to this norm
+            #and if the norm is not yet at maximal regularity
+            if FuncData02[0] != '1' and abs(tup0.ordr + tup0.sblv) == 0 and parent.isleaf == False and MakeLeafReg == False: 
+                prange_u = np.arange(max(pinit_u, tup0.lbsg), max(pmax_u, tup0.lbsg) + step, step)
+                prange_v = np.arange(max(pinit_v, tup0.lbsg), max(pmax_v, tup0.lbsg) + step, step)
 				
-				#Apply Holder's inequality with all possible p-values
-                for p in prange:
-                    normnew = actions.Holder(parent.data, i, p)
+		#Apply Holder's inequality with all possible p-values
+                for p in prange_u:
+                    normnew = actions.Holder(parent.data, i, 0, p)
                     normnew = actions.eliminate(normnew) #eliminate duplicates
                     normnew = actions.absorb_weaker(normnew) #absorb the weaker norms by stronger ones
                     normnew = sorted(normnew) #sort for consistency
                     normnew_tuple = tuple(tuple(tuple(x) for x in row) for row in normnew)
+
+
+                    LowScore = False
+                    Holder_u_low = False; Holder_v_low = False
+                    nonHolder_u_low = False; nonHolder_v_low = False
+
+                    #compare with the nodes of the same depth
+                    if len(levels) <= lvl: levels += [[]]
+                    
+                    for node in levels[lvl]: 
+                        if node in parent.ancestors: continue
+                        
+                        #Get maximum regularities of both
+                        (k1, p1), (l1, q1), (k2, p2), (l2, q2) = actions.GetMaxReg(node.data)
+                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+
+                        if kh > k1 or (kh == k1 and ph >= p1): Holder_u_low = True
+                        if lh > l1 or (lh == l1 and qh >= q1): Holder_v_low = True
+                        if kn > k2 or (kn == k2 and pn >= p2): nonHolder_u_low = True
+                        if ln > l2 or (ln == l2 and qn >= q2): nonHolder_v_low = True
+
+                        #if the current node has stronger regularity than the other one,
+                        #then it has a lower score
+                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
+                            LowScore = True
+                            break
+
+                    #compare with the leaf nodes
+                    Holder_u_low = False; Holder_v_low = False
+                    nonHolder_u_low = False; nonHolder_v_low = False
+                    for leaf in leafnodes:
+                        if LowScore: break
+
+                        ku = leaf.data[0][0][2]; pu = leaf.data[0][0][3]
+                        lv = leaf.data[0][1][2]; qv = leaf.data[0][1][3]
+                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+
+                        if kh > ku or (kh == ku and ph >= pu): Holder_u_low = True
+                        if lh > lv or (lh == lv and qh >= qv): Holder_v_low = True
+                        if kn > ku or (kn == ku and pn >= pu): nonHolder_u_low = True
+                        if ln > lv or (ln == lv and qn >= qv): nonHolder_v_low = True
+
+                        #same principle
+                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
+                            LowScore = True
+
+                            
+
+
                     if normnew_tuple not in visited: #if not yet visited
                         visited.add(normnew_tuple) #mark as visited
-                        normnode = TreeNode(normnew) 
-                        parent.add_child(normnode) #add as child
-                        queue.append(normnode)
 
+                        #if it isn't stronger than either the leaf or the same-depth nodes , 
+                        #then create child;
+                        #it will be compared further when it is dequed, in case 
+                        #weaker (more promising) nodes are created afterwards
+                        if not LowScore:
+                            normnode = TreeNode(normnew) 
+                            parent.add_child(normnode) #add as child
+                            queue.append(normnode)
+                            levels[lvl].append(normnode)
+                            totalnnodes += 1
 
+                #DO THE SAME WITH THE REST OF THE ACTIONS
 					
-					#The following does the same w.r.t. v - commented out for now (possibly needs correction too)
+                #The following does the same w.r.t. v
+                for p in prange_v:
+                    normnew = actions.Holder(parent.data, i, 1, p)
+                    normnew = actions.eliminate(normnew) #eliminate duplicates
+                    normnew = actions.absorb_weaker(normnew) #absorb the weaker norms by stronger ones
+                    normnew = sorted(normnew) #sort for consistency
+                    normnew_tuple = tuple(tuple(tuple(x) for x in row) for row in normnew)
 
-                    '''
-					p, pstar = actions.HolderExponent(tup0.lbsg, p)
-					if abs(tup0.lbsg - pstar) > 0.5*step:
-						normnew = actions.Holder(norms, i, pstar)
-						normnew = actions.eliminate(normnew)
-						normnew = actions.absorb_weaker(normnew)
-						normnew = sorted(normnew)
-						normnode = TreeNode(normnew)
-						parent.add_child(normnode)
-						stack.append(normnode)
-						#if parent.data != normnode.data: parent.add_child(normnode)
-					'''
+                    LowScore = False
+                    Holder_u_low = False; Holder_v_low = False
+                    nonHolder_u_low = False; nonHolder_v_low = False
+
+                    if len(levels) <= lvl: levels += [[]]
+                    
+                    for node in levels[lvl]:
+                        if node in parent.ancestors: continue
+                        (k1, p1), (l1, q1), (k2, p2), (l2, q2) = actions.GetMaxReg(node.data)
+                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+
+                        if kh > k1 or (kh == k1 and ph >= p1): Holder_u_low = True
+                        if lh > l1 or (lh == l1 and qh >= q1): Holder_v_low = True
+                        if kn > k2 or (kn == k2 and pn >= p2): nonHolder_u_low = True
+                        if ln > l2 or (ln == l2 and qn >= q2): nonHolder_v_low = True
+
+                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
+                            LowScore = True
+                            break
+
+                    Holder_u_low = False; Holder_v_low = False
+                    nonHolder_u_low = False; nonHolder_v_low = False
+                    for leaf in leafnodes:
+                        if LowScore: break
+
+                        ku = leaf.data[0][0][2]; pu = leaf.data[0][0][3]
+                        lv = leaf.data[0][1][2]; qv = leaf.data[0][1][3]
+                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+
+                       
+                        if kh > ku or (kh == ku and ph >= pu): Holder_u_low = True
+                        if lh > lv or (lh == lv and qh >= qv): Holder_v_low = True
+                        if kn > ku or (kn == ku and pn >= pu): nonHolder_u_low = True
+                        if ln > lv or (ln == lv and qn >= qv): nonHolder_v_low = True
+
+                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
+                            LowScore = True
+
+
+                            
+
+                    if normnew_tuple not in visited: #if not yet visited
+                        visited.add(normnew_tuple) #mark as visited
+                        if not LowScore:
+                            normnode = TreeNode(normnew) 
+                            parent.add_child(normnode) #add as child
+                            queue.append(normnode)
+                            levels[lvl].append(normnode)
+                            totalnnodes += 1
 					
             for j in range(2): #iterate over the two functions in the norm
 
@@ -168,69 +462,221 @@ def build_tree(root, pmax, step, kmax, lmax, depth):
                 FuncData1 = literal_eval(splits[0]); FuncData2 = literal_eval(splits[1])
                 ord1 = FuncData1[1]; ord2 = FuncData2[1]
 				
-				#If the total derivative order is positive
-				#and the term is not yet Holdered
-				#and the norm is not yet at maximal regularity
+                #If the total derivative order is positive
+                #and the term is not yet Holdered
+                #and the norm is not yet at maximal regularity
                 if tup.ordr != 0 and tup.fncs != "('1', 0)*('1', 0)" and FuncData02[0] != '1' \
-				    and parent.isleaf == False and ParentHitMaxReg == False: 
+				    and parent.isleaf == False and MakeLeafReg == False:
                     normnew = actions.prod(parent.data, i, j) #product rule
                     normnew = actions.eliminate(normnew)
                     normnew = actions.absorb_weaker(normnew)
                     normnew = sorted(normnew)
                     normnew_tuple = tuple(tuple(tuple(x) for x in row) for row in normnew)
+
+                    LowScore = False
+                    Holder_u_low = False; Holder_v_low = False
+                    nonHolder_u_low = False; nonHolder_v_low = False
+
+                    if len(levels) <= lvl: levels += [[]]
+                    
+                    for node in levels[lvl]:
+                        if node in parent.ancestors: continue
+                        (k1, p1), (l1, q1), (k2, p2), (l2, q2) = actions.GetMaxReg(node.data)
+                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+
+                        if kh > k1 or (kh == k1 and ph >= p1): Holder_u_low = True
+                        if lh > l1 or (lh == l1 and qh >= q1): Holder_v_low = True
+                        if kn > k2 or (kn == k2 and pn >= p2): nonHolder_u_low = True
+                        if ln > l2 or (ln == l2 and qn >= q2): nonHolder_v_low = True
+
+                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
+                            LowScore = True
+                            break
+
+                    Holder_u_low = False; Holder_v_low = False
+                    nonHolder_u_low = False; nonHolder_v_low = False
+                    for leaf in leafnodes:
+                        if LowScore: break
+
+                        ku = leaf.data[0][0][2]; pu = leaf.data[0][0][3]
+                        lv = leaf.data[0][1][2]; qv = leaf.data[0][1][3]
+                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+
+                        if kh > ku or (kh == ku and ph >= pu): Holder_u_low = True
+                        if lh > lv or (lh == lv and qh >= qv): Holder_v_low = True
+                        if kn > ku or (kn == ku and pn >= pu): nonHolder_u_low = True
+                        if ln > lv or (ln == lv and qn >= qv): nonHolder_v_low = True
+
+                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
+                            LowScore = True
+
+                            
+
                     if normnew_tuple not in visited: 
-                        visited.add(normnew_tuple)
-                        normnode = TreeNode(normnew)
-                        parent.add_child(normnode) 
-                        queue.append(normnode)
+                        visited.add(normnew_tuple) #mark as visited
+                        if not LowScore:
+                            normnode = TreeNode(normnew) 
+                            parent.add_child(normnode) #add as child
+                            queue.append(normnode)
+                            levels[lvl].append(normnode)
+                            totalnnodes += 1
 				
-				#Under the exact same conditions as above
+		#Under the exact same conditions as above
                 if tup.sblv != 0 and tup.fncs != "('1', 0)*('1', 0)" and FuncData02[0] != '1' \
-				 	and parent.isleaf == False and ParentHitMaxReg == False:
+				 	and parent.isleaf == False and MakeLeafReg == False:
                     normnew = actions.expand(parent.data, i, j) #expand Sobolev norm to sum of seminorms
                     normnew = actions.eliminate(normnew)
                     normnew = actions.absorb_weaker(normnew)
                     normnew = sorted(normnew)
                     normnew_tuple = tuple(tuple(tuple(x) for x in row) for row in normnew)
+
+                    LowScore = False
+                    Holder_u_low = False; Holder_v_low = False
+                    nonHolder_u_low = False; nonHolder_v_low = False
+
+                    if len(levels) <= lvl: levels += [[]]
+                    
+                    for node in levels[lvl]:
+                        if node in parent.ancestors: continue
+                        (k1, p1), (l1, q1), (k2, p2), (l2, q2) = actions.GetMaxReg(node.data)
+                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+
+                        if kh > k1 or (kh == k1 and ph >= p1): Holder_u_low = True
+                        if lh > l1 or (lh == l1 and qh >= q1): Holder_v_low = True
+                        if kn > k2 or (kn == k2 and pn >= p2): nonHolder_u_low = True
+                        if ln > l2 or (ln == l2 and qn >= q2): nonHolder_v_low = True
+
+                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
+                            LowScore = True
+                            break
+
+                    Holder_u_low = False; Holder_v_low = False
+                    nonHolder_u_low = False; nonHolder_v_low = False
+                    for leaf in leafnodes:
+                        if LowScore: break
+
+                        ku = leaf.data[0][0][2]; pu = leaf.data[0][0][3]
+                        lv = leaf.data[0][1][2]; qv = leaf.data[0][1][3]
+                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+
+                        if kh > ku or (kh == ku and ph >= pu): Holder_u_low = True
+                        if lh > lv or (lh == lv and qh >= qv): Holder_v_low = True
+                        if kn > ku or (kn == ku and pn >= pu): nonHolder_u_low = True
+                        if ln > lv or (ln == lv and qn >= qv): nonHolder_v_low = True
+
+                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
+                            LowScore = True
+
+                            
+
                     if normnew_tuple not in visited: 
-                        visited.add(normnew_tuple)
-                        normnode = TreeNode(normnew)
-                        parent.add_child(normnode)
-                        queue.append(normnode)
-				
-				#Under the same conditions as above, but now allowing zero derivative order
+                        visited.add(normnew_tuple) #mark as visited
+                        if not LowScore:
+                            normnode = TreeNode(normnew) 
+                            parent.add_child(normnode) #add as child
+                            queue.append(normnode)
+                            levels[lvl].append(normnode)
+                            totalnnodes += 1
+
                 if tup.fncs != "('1', 0)*('1', 0)" and FuncData02[0] != '1' \
-				    and parent.isleaf == False and ParentHitMaxReg == False: 
+				    and parent.isleaf == False and MakeLeafReg == False:
                     normnew = actions.embed(parent.data, i, j) #apply Sobolev embedding
                     normnew = actions.eliminate(normnew)
                     normnew = actions.absorb_weaker(normnew)
                     normnew = sorted(normnew)
                     normnew_tuple = tuple(tuple(tuple(x) for x in row) for row in normnew)
+
+                    LowScore = False
+                    Holder_u_low = False; Holder_v_low = False
+                    nonHolder_u_low = False; nonHolder_v_low = False
+
+                    if len(levels) <= lvl: levels += [[]]
+                    
+                    for node in levels[lvl]:
+                        if node in parent.ancestors: continue
+                        (k1, p1), (l1, q1), (k2, p2), (l2, q2) = actions.GetMaxReg(node.data)
+                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+
+                        if kh > k1 or (kh == k1 and ph >= p1): Holder_u_low = True
+                        if lh > l1 or (lh == l1 and qh >= q1): Holder_v_low = True
+                        if kn > k2 or (kn == k2 and pn >= p2): nonHolder_u_low = True
+                        if ln > l2 or (ln == l2 and qn >= q2): nonHolder_v_low = True
+
+                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
+                            LowScore = True
+
+                    Holder_u_low = False; Holder_v_low = False
+                    nonHolder_u_low = False; nonHolder_v_low = False
+                    for leaf in leafnodes:
+                        if LowScore: break
+
+                        ku = leaf.data[0][0][2]; pu = leaf.data[0][0][3]
+                        lv = leaf.data[0][1][2]; qv = leaf.data[0][1][3]
+                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+
+                        if kh > ku or (kh == ku and ph >= pu): Holder_u_low = True
+                        if lh > lv or (lh == lv and qh >= qv): Holder_v_low = True
+                        if kn > ku or (kn == ku and pn >= pu): nonHolder_u_low = True
+                        if ln > lv or (ln == lv and qn >= qv): nonHolder_v_low = True
+
+                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
+                            LowScore = True
+
+                            
+
                     if normnew_tuple not in visited: 
-                        visited.add(normnew_tuple)
-                        normnode = TreeNode(normnew)
-                        parent.add_child(normnode)
-                        queue.append(normnode)
+                        visited.add(normnew_tuple) #mark as visited
+                        if not LowScore:
+                            normnode = TreeNode(normnew) 
+                            parent.add_child(normnode) #add as child
+                            queue.append(normnode)
+                            levels[lvl].append(normnode)
+                            totalnnodes += 1
+                            
 
-        if parent.nchildren == 0: parent.isleaf = True
+        #If no children were added and there are nonsplitted terms, 
+        #prune the branch and remove ancestors  only leading to this node,
+        #so that you won't have any useless leaf nodes
+        ancestors_rev = parent.ancestors
+        ancestors_rev.reverse()
+        for anc in ancestors_rev:
+            if anc.nchildren > 0: break
+            anc.parents.children.remove(anc)
+            anc.parents.nchildren -= 1
+            totalnnodes -= 1
 
+        if proc.memory_info().rss >= THRESHOLD:
+            print("Memory threshold reached; stopping loop.")
+            break
+
+    print("Total number of nodes:", totalnnodes)
+    
 		
 #Example: Find upper bounds for \|uv\|_{H^1}
 funcs = "('u', 0)*('v', 0)"
 norms = [[(funcs, 0, 1, 2), ("('1', 0)*('1', 0)", 0, 0, 0)]]
 
-tup_init = Norm(norms[0][0]); pinit = tup_init.lbsg; pmax = 5
+tup_init = Norm(norms[0][0])
+pinit_u = tup_init.lbsg; pmax_u = 5
+pinit_v = tup_init.lbsg; pmax_v = 5
 
-print(" ")
-print(norms)
-print(" ")
 
 norms = sorted(norms)
 
-kmax = 2; lmax = 2; step = 1
+kmax = math.inf; lmax = math.inf; step = 1
+#kmax = 3; lmax = 3; step = 1
 
+
+
+start_time = time.time()
 root = TreeNode(norms); depth = math.inf
-build_tree(root, pmax, step, kmax, lmax, depth)
+build_tree(root, pinit_u, pmax_u, pinit_v, pmax_v, step, kmax, lmax, depth)
+end_time = time.time()
+
+
+print(" ")
+print("Total computation time: {time} seconds".format(time = end_time - start_time))
+print(" ")
 		
 		
 				
