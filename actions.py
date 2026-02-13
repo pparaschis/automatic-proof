@@ -210,7 +210,7 @@ def BoundByNorm(norms, r, s):
 
 
 
-def Holder(norms, r, q):
+def Holder(norms, r, s, q):
 
 	'''
 	Applies Hölder's inequality to a norm of a product.
@@ -219,6 +219,7 @@ def Holder(norms, r, q):
 
 	norms: as in expand()
 	r: as in expand()
+	s: 0 if applying w.r.t. first function in the product, 1 for the second
 	q: desired Lebesgue exponent after applying Hölder's inequality
 
 	Output: new list of norms with the Hölder-split norm replacing the r-component
@@ -228,56 +229,25 @@ def Holder(norms, r, q):
 		print("Index exceeds number of sum terms")
 		return norms
 	
-	subnorms = norms[r]
+	subnorm = norms[r][0]
+	funcs = subnorm[0]; order = subnorm[1]; sobolev = subnorm[2]; lebesgue = subnorm[3]
 
-	#if both are 1, don't apply Hölder's inequality (not the case in the tree)
-	if subnorms[1] != ("('1', 0)*('1', 0)", 0, 0, 0) \
-	and subnorms[0] == ("('1', 0)*('1', 0)", 0, 0, 0): 
-		temp_sn = [subnorms[0]]
-		subnorms = [subnorms[1], temp_sn[0]]
-		
-		norms = norms[0:r] + [subnorms] + norms[r+1:len(norms)]
-		
-	funcs = subnorms[0][0]; order = subnorms[0][1]; sobolev = subnorms[0][2]; lebesgue = subnorms[0][3]
-	funcs1 = subnorms[1][0]; order1 = subnorms[1][1]; sobolev1 = subnorms[1][2]; lebesgue1 = subnorms[1][3]
-	
-	#if the derivative order of the product is positive
-	#or if the Sobolev order is positive, don't apply Hölder's inequality
-	if order + sobolev != 0:
-		print(order, sobolev)
-		print("Input is not ready for Hölder's inequality!") 
-		print (subnorms); input()
-		return norms
-		
-	
 	splits = funcs.split("*") #split the product
 	FuncData1 = literal_eval(splits[0]); FuncData2 = literal_eval(splits[1]) #get the name of the function
 	ord1 = FuncData1[1]; ord2 = FuncData2[1] #get the derivative orders of the functions in the product
-	
-	if FuncData2[0] == '1': #if Hölder's inequality has already been applied
-		
-		order = ord1
-		funcsnew = "('{data}', 0)*('1', 0)".format(data = FuncData1[0])
-		subnorms = [(funcsnew, order, sobolev, lebesgue), (funcs1, order1, sobolev1, lebesgue1)]
-		
-		print("Hölder's inequality has already been applied; please check for validity.")
-		print(subnorms); input()
-		return norms[0:r] + [subnorms] + norms[r+1:len(norms)]
-	
-	#if Hölder's inequality is not applicable
-	if q < lebesgue and lebesgue != math.inf: 
-		print("There's no such Hölder's inequality!")
-		input()
-		return norms
-		
-	q, qprime = HolderExponent(lebesgue, q) #compute the Hölder exponents
-	
+
+	if s == 0: q, qprime = HolderExponent(lebesgue, q) #if s == 0, compute the Hölder exponents w.r.t. the first function
+	else: qprime, q = HolderExponent(lebesgue, q) #else w.r.t. the second function
+
 	funcs_new1 = "('{data}', 0)*('1', 0)".format(data = FuncData1[0])
 	funcs_new2 = "('{data}', 0)*('1', 0)".format(data = FuncData2[0])
+	splitted = [(funcs_new1, ord1, 0, qprime), (funcs_new2, ord2, 0, q)]
+
 	
-	splitted = [(funcs_new1, ord1, 0, q), (funcs_new2, ord2, 0, qprime)]
-	
+
 	return norms[0:r] + [splitted] + norms[r+1:len(norms)] 
+	
+	
 	
 
 def absorb_weaker(norms):
@@ -346,30 +316,25 @@ def sortHolder(norms):
 	return splitted, nonsplitted
 
 
-def CheckRegularity(norms, kmax, lmax):
+def GetMaxReg(norms):
 
 	'''
-	Checks whether the norms have reached maximal regularity.
+	Calculating the maximum regularity of the state.
 
 	Input:
 
 	norms: list of norms in the form [[(funcs1, order1, sobolev1, lebesgue1), (funcs2, order2, sobolev2, lebesgue2)], ...]
-	kmax: maximal regularity for the first function
-	lmax: maximal regularity for the second function
 
 	Output:	
 
-	MakeLeaf: boolean indicating whether maximal regularity has been reached (so it will be turned to a leaf in the tree)	
 	(k1, p1): tuple with the highest regularity and Lebesgue exponent for the first function in the splitted norms
 	(l1, q1): tuple with the highest regularity and Lebesgue exponent for the second function in the splitted norms
 	(k2, p2): tuple with the highest regularity and Lebesgue exponent for the first function in the nonsplitted norms
 	(l2, q2): tuple with the highest regularity and Lebesgue exponent for the second function in the nonsplitted norms
-
 	'''
 
-	MakeLeaf = False
 	splitted, nonsplitted = sortHolder(norms) #split the norms into those with Hölder's inequality applied and those without
-
+	
 	#Get the highest regularity and Lebesgue exponents for the splitted norms
 	KH = sorted([(norm[0][1] + norm[0][2], norm[0][3]) for norm in splitted], key = lambda x: (x[0], x[1])) 
 
@@ -399,19 +364,46 @@ def CheckRegularity(norms, kmax, lmax):
 	if len(nonsplitted) != 0: #if there are non-splitted norms, get the strongest
 		KP2 = K[-1]; k2 = KP2[0]; p2 = KP2[1]
 		LQ2 = L[-1]; l2 = LQ2[0]; q2 = LQ2[1]
+
+	return (k1, p1), (l1, q1), (k2, p2), (l2, q2)
+
+
+def CheckRegularity(norms, kmax, lmax):
+
+	'''
+	Checks whether the norms have reached maximal regularity.
+
+	Input:
+
+	norms: list of norms in the form [[(funcs1, order1, sobolev1, lebesgue1), (funcs2, order2, sobolev2, lebesgue2)], ...]
+	kmax: maximal regularity for the first function
+	lmax: maximal regularity for the second function
+
+	Output:	
+
+	MakeLeafReg: boolean indicating whether maximal regularity has been reached (so it will be turned to a leaf in the tree)	
+	MakeLeafHolder: boolean indicating whether all terms are Holder-splitted (i.e., if it is a terminal state)	
+	(k1, p1): tuple with the highest regularity and Lebesgue exponent for the first function in the splitted norms
+	(l1, q1): tuple with the highest regularity and Lebesgue exponent for the second function in the splitted norms
+	(k2, p2): tuple with the highest regularity and Lebesgue exponent for the first function in the nonsplitted norms
+	(l2, q2): tuple with the highest regularity and Lebesgue exponent for the second function in the nonsplitted norms
+	'''
+
+	MakeLeafReg = False; MakeLeafHolder = False
+	splitted, nonsplitted = sortHolder(norms) #split the norms into those with Hölder's inequality applied and those without
+	if nonsplitted == []: MakeLeafHolder = True #if all norms are splitted, mark for leaf
 	
-	
+	(k1, p1), (l1, q1), (k2, p2), (l2, q2) = GetMaxReg(norms)
+
 	#if maximal regularity has been reached in either function, 
 	#or all are splitted by Hölder's inequality, then turn to leaf
-	if max(k1, k2) >= kmax or max(l1, l2) >= lmax or nonsplitted == []: MakeLeaf = True
+	if max(k1, k2) >= kmax or max(l1, l2) >= lmax: MakeLeafReg = True
 	
 	
-	return MakeLeaf, (k1, p1), (l1, q1), (k2, p2), (l2, q2)
-		
+	return MakeLeafReg, MakeLeafHolder, (k1, p1), (l1, q1), (k2, p2), (l2, q2)
 
-		
-	
-	
+
+
 	
 
 
