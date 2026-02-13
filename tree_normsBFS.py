@@ -9,6 +9,7 @@ import psutil
 
 
 #Memory-based stopping criterion - can be skipped if RAM is large enough
+#for skipping, comment out "import psutil" and the two following lines
 proc = psutil.Process()
 THRESHOLD = 3 * 1024**3  # 3 GB
 
@@ -645,6 +646,8 @@ def build_tree(root, pinit_u, pmax_u, pinit_v, pmax_v, step, kmax, lmax, depth):
             anc.parents.nchildren -= 1
             totalnnodes -= 1
 
+        #for skipping the memory-based stopping criterion,
+        #comment out the three following lines as well
         if proc.memory_info().rss >= THRESHOLD:
             print("Memory threshold reached; stopping loop.")
             break
@@ -664,7 +667,7 @@ pinit_v = tup_init.lbsg; pmax_v = 5
 norms = sorted(norms)
 
 kmax = math.inf; lmax = math.inf; step = 1
-#kmax = 3; lmax = 3; step = 1
+#kmax = 2; lmax = 2; step = 1
 
 
 
