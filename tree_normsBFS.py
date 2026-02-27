@@ -85,7 +85,7 @@ def build_tree(root, pinit_u, pmax_u, pinit_v, pmax_v, step, kmax, lmax, depth):
 			
         MakeLeafReg, MakeLeafHolder, (k1, p1), (l1, q1), (k2, p2), (l2, q2) = actions.CheckRegularity(parent.data, kmax, lmax) #Check regularity
 
-	#Holder exponent ranges for the non-Holdered norms
+		#Holder exponent ranges for the non-Holdered norms
         #Range for first Holder exponent
         srange = np.arange(max(p2, pinit_u), max(p2, pmax_u) + step, step) 
 
@@ -240,7 +240,7 @@ def build_tree(root, pinit_u, pmax_u, pinit_v, pmax_v, step, kmax, lmax, depth):
 		
         if parent.isleaf:
 
-	    #Print the proof for the leaf node kind of in latex format
+	    	#Print the proof for the leaf node kind of in latex format
 		
 			
             print(" ")
@@ -260,26 +260,35 @@ def build_tree(root, pinit_u, pmax_u, pinit_v, pmax_v, step, kmax, lmax, depth):
             #in case new weaker ones where created on the same level after this one
             #if so, then don't expand it further
             LowScore = False
-            Holder_u_low = False; Holder_v_low = False
-            nonHolder_u_low = False; nonHolder_v_low = False
+            u_low = False; v_low = False
 
             #compare with the nodes of the same depth
             if len(levels) <= lvl: levels += [[]]
+            
+            Kparent = sorted([(k1, p1), (k2, p2)], key = lambda x: (x[0], x[1]))
+            Lparent = sorted([(l1, q1), (l2, q2)], key = lambda x: (x[0], x[1]))
+            
+            kparent = Kparent[-1][0]; pparent = Kparent[-1][1]
+            lparent = Lparent[-1][0]; qparent = Lparent[-1][1]
             
             for node in levels[lvl]: 
                 if node in parent.ancestors: continue
                 
                 #Get maximum regularities of both
                 (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(node.data)
+                
+                Klevel = sorted([(kh, ph), (kn, pn)], key = lambda x: (x[0], x[1]))
+                Llevel = sorted([(lh, qh), (ln, qn)], key = lambda x: (x[0], x[1]))
+                
+                klevel = Klevel[-1][0]; plevel = Klevel[-1][1]
+                llevel = Llevel[-1][0]; qlevel = Llevel[-1][1]
 
-                if k1 > kh or (kh == k1 and p1 >= ph): Holder_u_low = True
-                if l1 > lh or (lh == l1 and q1 >= qh): Holder_v_low = True
-                if k2 > kn or (kn == k2 and p2 >= pn): nonHolder_u_low = True
-                if l2 > ln or (ln == l2 and q2 >= qn): nonHolder_v_low = True
+                if kparent > klevel or (kparent == klevel and pparent >= plevel): u_low = True
+                if lparent > llevel or (lparent == llevel and qparent >= qlevel): v_low = True
 
                 #if the current node has stronger regularity than the other one,
                 #then it has a lower score
-                if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
+                if u_low and v_low: 
                     LowScore = True
                     break
 
@@ -289,11 +298,8 @@ def build_tree(root, pinit_u, pmax_u, pinit_v, pmax_v, step, kmax, lmax, depth):
                 lv = leaf.data[0][1][2]; qv = leaf.data[0][1][3]
 
                 ustronger = False; vstronger = False
-                if k1 > ku or (k1 == ku and p1 >= pu): ustronger = True #edw if k1 > ku: ustronger = True etc.
-                if l1 > lv or (l1 == lv and q1 >= qv): vstronger = True
-
-                if k2 > ku or (k2 == ku and p2 >= pu): ustronger = True
-                if l2 > lv or (l2 == lv and q2 >= qv): vstronger = True
+                if kparent > ku or (k1 == ku and p1 >= pu): ustronger = True 
+                if lparent > lv or (l1 == lv and q1 >= qv): vstronger = True
 
                 if ustronger and vstronger: LowScore = True
 
@@ -324,8 +330,8 @@ def build_tree(root, pinit_u, pmax_u, pinit_v, pmax_v, step, kmax, lmax, depth):
             if FuncData02[0] != '1' and abs(tup0.ordr + tup0.sblv) == 0 and parent.isleaf == False and MakeLeafReg == False: 
                 prange_u = np.arange(max(pinit_u, tup0.lbsg), max(pmax_u, tup0.lbsg) + step, step)
                 prange_v = np.arange(max(pinit_v, tup0.lbsg), max(pmax_v, tup0.lbsg) + step, step)
-				
-		#Apply Holder's inequality with all possible p-values
+						
+				#Apply Holder's inequality with all possible p-values
                 for p in prange_u:
                     normnew = actions.Holder(parent.data, i, 0, p)
                     normnew = actions.eliminate(normnew) #eliminate duplicates
@@ -335,48 +341,53 @@ def build_tree(root, pinit_u, pmax_u, pinit_v, pmax_v, step, kmax, lmax, depth):
 
 
                     LowScore = False
-                    Holder_u_low = False; Holder_v_low = False
-                    nonHolder_u_low = False; nonHolder_v_low = False
+                    u_low = False; v_low = False
 
                     #compare with the nodes of the same depth
                     if len(levels) <= lvl: levels += [[]]
+                    
+                    (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+                    
+                    Knode = sorted([(kh, ph), (kn, pn)], key = lambda x: (x[0], x[1]))
+                    Lnode = sorted([(lh, qh), (ln, qn)], key = lambda x: (x[0], x[1]))
+                    knode = Knode[-1][0]; pnode = Knode[-1][1]
+                    lnode = Lnode[-1][0]; qnode = Lnode[-1][1]
                     
                     for node in levels[lvl]: 
                         if node in parent.ancestors: continue
                         
                         #Get maximum regularities of both
                         (k1, p1), (l1, q1), (k2, p2), (l2, q2) = actions.GetMaxReg(node.data)
-                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+                        
+                        Klevel = sorted([(k1, p1), (k2, p2)], key = lambda x: (x[0], x[1]))
+                        Llevel = sorted([(l1, q1), (l2, q2)], key = lambda x: (x[0], x[1]))
+                        
+                        klevel = Klevel[-1][0]; plevel = Klevel[-1][1]
+                        llevel = Llevel[-1][0]; qlevel = Llevel[-1][1]
+                        
 
-                        if kh > k1 or (kh == k1 and ph >= p1): Holder_u_low = True
-                        if lh > l1 or (lh == l1 and qh >= q1): Holder_v_low = True
-                        if kn > k2 or (kn == k2 and pn >= p2): nonHolder_u_low = True
-                        if ln > l2 or (ln == l2 and qn >= q2): nonHolder_v_low = True
+                        if knode > klevel or (knode == klevel and pnode >= plevel): u_low = True
+                        if lnode > llevel or (lnode == llevel and qnode >= qlevel): v_low = True
 
                         #if the current node has stronger regularity than the other one,
                         #then it has a lower score
-                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
+                        if u_low and v_low: 
                             LowScore = True
                             break
 
                     #compare with the leaf nodes
-                    Holder_u_low = False; Holder_v_low = False
-                    nonHolder_u_low = False; nonHolder_v_low = False
+                    u_low = False; v_low = False
                     for leaf in leafnodes:
                         if LowScore: break
 
                         ku = leaf.data[0][0][2]; pu = leaf.data[0][0][3]
                         lv = leaf.data[0][1][2]; qv = leaf.data[0][1][3]
-                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
 
-                        if kh > ku or (kh == ku and ph >= pu): Holder_u_low = True
-                        if lh > lv or (lh == lv and qh >= qv): Holder_v_low = True
-                        if kn > ku or (kn == ku and pn >= pu): nonHolder_u_low = True
-                        if ln > lv or (ln == lv and qn >= qv): nonHolder_v_low = True
+                        if knode > ku or (knode == ku and pnode >= pu): u_low = True
+                        if lnode > lv or (lnode == lv and qnode >= qv): v_low = True
 
                         #same principle
-                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
-                            LowScore = True
+                        if u_low and v_low: LowScore = True
 
                             
 
@@ -406,42 +417,47 @@ def build_tree(root, pinit_u, pmax_u, pinit_v, pmax_v, step, kmax, lmax, depth):
                     normnew_tuple = tuple(tuple(tuple(x) for x in row) for row in normnew)
 
                     LowScore = False
-                    Holder_u_low = False; Holder_v_low = False
-                    nonHolder_u_low = False; nonHolder_v_low = False
+                    u_low = False; v_low = False
 
                     if len(levels) <= lvl: levels += [[]]
+                    
+                    (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+                    
+                    Knode = sorted([(kh, ph), (kn, pn)], key = lambda x: (x[0], x[1]))
+                    Lnode = sorted([(lh, qh), (ln, qn)], key = lambda x: (x[0], x[1]))
+                    knode = Knode[-1][0]; pnode = Knode[-1][1]
+                    lnode = Lnode[-1][0]; qnode = Lnode[-1][1]
                     
                     for node in levels[lvl]:
                         if node in parent.ancestors: continue
                         (k1, p1), (l1, q1), (k2, p2), (l2, q2) = actions.GetMaxReg(node.data)
-                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+                        
+                        Klevel = sorted([(k1, p1), (k2, p2)], key = lambda x: (x[0], x[1]))
+                        Llevel = sorted([(l1, q1), (l2, q2)], key = lambda x: (x[0], x[1]))
+                        
+                        klevel = Klevel[-1][0]; plevel = Klevel[-1][1]
+                        llevel = Llevel[-1][0]; qlevel = Llevel[-1][1]
+                        
 
-                        if kh > k1 or (kh == k1 and ph >= p1): Holder_u_low = True
-                        if lh > l1 or (lh == l1 and qh >= q1): Holder_v_low = True
-                        if kn > k2 or (kn == k2 and pn >= p2): nonHolder_u_low = True
-                        if ln > l2 or (ln == l2 and qn >= q2): nonHolder_v_low = True
+                        if knode > klevel or (knode == klevel and pnode >= plevel): u_low = True
+                        if lnode > llevel or (lnode == llevel and qnode >= qlevel): v_low = True
 
-                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
+                        #if the current node has stronger regularity than the other one,
+                        #then it has a lower score
+                        if u_low and v_low: 
                             LowScore = True
                             break
 
-                    Holder_u_low = False; Holder_v_low = False
-                    nonHolder_u_low = False; nonHolder_v_low = False
+                    u_low = False; v_low = False
                     for leaf in leafnodes:
                         if LowScore: break
 
                         ku = leaf.data[0][0][2]; pu = leaf.data[0][0][3]
                         lv = leaf.data[0][1][2]; qv = leaf.data[0][1][3]
-                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+                        if knode > ku or (knode == ku and pnode >= pu): u_low = True
+                        if lnode > lv or (lnode == lv and qnode >= qv): v_low = True
 
-                       
-                        if kh > ku or (kh == ku and ph >= pu): Holder_u_low = True
-                        if lh > lv or (lh == lv and qh >= qv): Holder_v_low = True
-                        if kn > ku or (kn == ku and pn >= pu): nonHolder_u_low = True
-                        if ln > lv or (ln == lv and qn >= qv): nonHolder_v_low = True
-
-                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
-                            LowScore = True
+                        if u_low and v_low: LowScore = True
 
 
                             
@@ -473,43 +489,49 @@ def build_tree(root, pinit_u, pmax_u, pinit_v, pmax_v, step, kmax, lmax, depth):
                     normnew = actions.absorb_weaker(normnew)
                     normnew = sorted(normnew)
                     normnew_tuple = tuple(tuple(tuple(x) for x in row) for row in normnew)
-
                     LowScore = False
-                    Holder_u_low = False; Holder_v_low = False
-                    nonHolder_u_low = False; nonHolder_v_low = False
+                    u_low = False; v_low = False
 
                     if len(levels) <= lvl: levels += [[]]
+                    
+                    (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+                    
+                    Knode = sorted([(kh, ph), (kn, pn)], key = lambda x: (x[0], x[1]))
+                    Lnode = sorted([(lh, qh), (ln, qn)], key = lambda x: (x[0], x[1]))
+                    
+                    knode = Knode[-1][0]; pnode = Knode[-1][1]
+                    lnode = Lnode[-1][0]; qnode = Lnode[-1][1]
                     
                     for node in levels[lvl]:
                         if node in parent.ancestors: continue
                         (k1, p1), (l1, q1), (k2, p2), (l2, q2) = actions.GetMaxReg(node.data)
-                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+                        
+                        Klevel = sorted([(k1, p1), (k2, p2)], key = lambda x: (x[0], x[1]))
+                        Llevel = sorted([(l1, q1), (l2, q2)], key = lambda x: (x[0], x[1]))
+                        
+                        klevel = Klevel[-1][0]; plevel = Klevel[-1][1]
+                        llevel = Llevel[-1][0]; qlevel = Llevel[-1][1]
+                        
 
-                        if kh > k1 or (kh == k1 and ph >= p1): Holder_u_low = True
-                        if lh > l1 or (lh == l1 and qh >= q1): Holder_v_low = True
-                        if kn > k2 or (kn == k2 and pn >= p2): nonHolder_u_low = True
-                        if ln > l2 or (ln == l2 and qn >= q2): nonHolder_v_low = True
+                        if knode > klevel or (knode == klevel and pnode >= plevel): u_low = True
+                        if lnode > llevel or (lnode == llevel and qnode >= qlevel): v_low = True
 
-                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
+                        #if the current node has stronger regularity than the other one,
+                        #then it has a lower score
+                        if u_low and v_low: 
                             LowScore = True
                             break
 
-                    Holder_u_low = False; Holder_v_low = False
-                    nonHolder_u_low = False; nonHolder_v_low = False
+                    u_low = False; v_low = False
                     for leaf in leafnodes:
                         if LowScore: break
 
                         ku = leaf.data[0][0][2]; pu = leaf.data[0][0][3]
                         lv = leaf.data[0][1][2]; qv = leaf.data[0][1][3]
-                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+                        if knode > ku or (knode == ku and pnode >= pu): u_low = True
+                        if lnode > lv or (lnode == lv and qnode >= qv): v_low = True
 
-                        if kh > ku or (kh == ku and ph >= pu): Holder_u_low = True
-                        if lh > lv or (lh == lv and qh >= qv): Holder_v_low = True
-                        if kn > ku or (kn == ku and pn >= pu): nonHolder_u_low = True
-                        if ln > lv or (ln == lv and qn >= qv): nonHolder_v_low = True
-
-                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
-                            LowScore = True
+                        if u_low and v_low: LowScore = True
 
                             
 
@@ -522,7 +544,7 @@ def build_tree(root, pinit_u, pmax_u, pinit_v, pmax_v, step, kmax, lmax, depth):
                             levels[lvl].append(normnode)
                             totalnnodes += 1
 				
-		#Under the exact same conditions as above
+				#Under the exact same conditions as above
                 if tup.sblv != 0 and tup.fncs != "('1', 0)*('1', 0)" and FuncData02[0] != '1' \
 				 	and parent.isleaf == False and MakeLeafReg == False:
                     normnew = actions.expand(parent.data, i, j) #expand Sobolev norm to sum of seminorms
@@ -532,41 +554,48 @@ def build_tree(root, pinit_u, pmax_u, pinit_v, pmax_v, step, kmax, lmax, depth):
                     normnew_tuple = tuple(tuple(tuple(x) for x in row) for row in normnew)
 
                     LowScore = False
-                    Holder_u_low = False; Holder_v_low = False
-                    nonHolder_u_low = False; nonHolder_v_low = False
+                    u_low = False; v_low = False
 
                     if len(levels) <= lvl: levels += [[]]
+                    
+                    (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+                    
+                    Knode = sorted([(kh, ph), (kn, pn)], key = lambda x: (x[0], x[1]))
+                    Lnode = sorted([(lh, qh), (ln, qn)], key = lambda x: (x[0], x[1]))
+                    
+                    knode = Knode[-1][0]; pnode = Knode[-1][1]
+                    lnode = Lnode[-1][0]; qnode = Lnode[-1][1]
                     
                     for node in levels[lvl]:
                         if node in parent.ancestors: continue
                         (k1, p1), (l1, q1), (k2, p2), (l2, q2) = actions.GetMaxReg(node.data)
-                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+                        
+                        Klevel = sorted([(k1, p1), (k2, p2)], key = lambda x: (x[0], x[1]))
+                        Llevel = sorted([(l1, q1), (l2, q2)], key = lambda x: (x[0], x[1]))
+                        
+                        klevel = Klevel[-1][0]; plevel = Klevel[-1][1]
+                        llevel = Llevel[-1][0]; qlevel = Llevel[-1][1]
+                        
 
-                        if kh > k1 or (kh == k1 and ph >= p1): Holder_u_low = True
-                        if lh > l1 or (lh == l1 and qh >= q1): Holder_v_low = True
-                        if kn > k2 or (kn == k2 and pn >= p2): nonHolder_u_low = True
-                        if ln > l2 or (ln == l2 and qn >= q2): nonHolder_v_low = True
+                        if knode > klevel or (knode == klevel and pnode >= plevel): u_low = True
+                        if lnode > llevel or (lnode == llevel and qnode >= qlevel): v_low = True
 
-                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
+                        #if the current node has stronger regularity than the other one,
+                        #then it has a lower score
+                        if u_low and v_low: 
                             LowScore = True
                             break
 
-                    Holder_u_low = False; Holder_v_low = False
-                    nonHolder_u_low = False; nonHolder_v_low = False
+                    u_low = False; v_low = False
                     for leaf in leafnodes:
                         if LowScore: break
 
                         ku = leaf.data[0][0][2]; pu = leaf.data[0][0][3]
                         lv = leaf.data[0][1][2]; qv = leaf.data[0][1][3]
-                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+                        if knode > ku or (knode == ku and pnode >= pu): u_low = True
+                        if lnode > lv or (lnode == lv and qnode >= qv): v_low = True
 
-                        if kh > ku or (kh == ku and ph >= pu): Holder_u_low = True
-                        if lh > lv or (lh == lv and qh >= qv): Holder_v_low = True
-                        if kn > ku or (kn == ku and pn >= pu): nonHolder_u_low = True
-                        if ln > lv or (ln == lv and qn >= qv): nonHolder_v_low = True
-
-                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
-                            LowScore = True
+                        if u_low and v_low: LowScore = True
 
                             
 
@@ -591,37 +620,49 @@ def build_tree(root, pinit_u, pmax_u, pinit_v, pmax_v, step, kmax, lmax, depth):
                     Holder_u_low = False; Holder_v_low = False
                     nonHolder_u_low = False; nonHolder_v_low = False
 
+                    LowScore = False
+                    u_low = False; v_low = False
+
                     if len(levels) <= lvl: levels += [[]]
+                    
+                    (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+                    
+                    Knode = sorted([(kh, ph), (kn, pn)], key = lambda x: (x[0], x[1]))
+                    Lnode = sorted([(lh, qh), (ln, qn)], key = lambda x: (x[0], x[1]))
+                    
+                    knode = Knode[-1][0]; pnode = Knode[-1][1]
+                    lnode = Lnode[-1][0]; qnode = Lnode[-1][1]
                     
                     for node in levels[lvl]:
                         if node in parent.ancestors: continue
                         (k1, p1), (l1, q1), (k2, p2), (l2, q2) = actions.GetMaxReg(node.data)
-                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+                        
+                        Klevel = sorted([(k1, p1), (k2, p2)], key = lambda x: (x[0], x[1]))
+                        Llevel = sorted([(l1, q1), (l2, q2)], key = lambda x: (x[0], x[1]))
+                        
+                        klevel = Klevel[-1][0]; plevel = Klevel[-1][1]
+                        llevel = Llevel[-1][0]; qlevel = Llevel[-1][1]
+                        
 
-                        if kh > k1 or (kh == k1 and ph >= p1): Holder_u_low = True
-                        if lh > l1 or (lh == l1 and qh >= q1): Holder_v_low = True
-                        if kn > k2 or (kn == k2 and pn >= p2): nonHolder_u_low = True
-                        if ln > l2 or (ln == l2 and qn >= q2): nonHolder_v_low = True
+                        if knode > klevel or (knode == klevel and pnode >= plevel): u_low = True
+                        if lnode > llevel or (lnode == llevel and qnode >= qlevel): v_low = True
 
-                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
+                        #if the current node has stronger regularity than the other one,
+                        #then it has a lower score
+                        if u_low and v_low: 
                             LowScore = True
+                            break
 
-                    Holder_u_low = False; Holder_v_low = False
-                    nonHolder_u_low = False; nonHolder_v_low = False
+                    u_low = False; v_low = False
                     for leaf in leafnodes:
                         if LowScore: break
 
                         ku = leaf.data[0][0][2]; pu = leaf.data[0][0][3]
                         lv = leaf.data[0][1][2]; qv = leaf.data[0][1][3]
-                        (kh, ph), (lh, qh), (kn, pn), (ln, qn) = actions.GetMaxReg(normnew)
+                        if knode > ku or (knode == ku and pnode >= pu): u_low = True
+                        if lnode > lv or (lnode == lv and qnode >= qv): v_low = True
 
-                        if kh > ku or (kh == ku and ph >= pu): Holder_u_low = True
-                        if lh > lv or (lh == lv and qh >= qv): Holder_v_low = True
-                        if kn > ku or (kn == ku and pn >= pu): nonHolder_u_low = True
-                        if ln > lv or (ln == lv and qn >= qv): nonHolder_v_low = True
-
-                        if Holder_u_low and Holder_v_low and nonHolder_u_low and nonHolder_v_low: 
-                            LowScore = True
+                        if u_low and v_low: LowScore = True
 
                             
 
@@ -667,7 +708,7 @@ pinit_v = tup_init.lbsg; pmax_v = 5
 norms = sorted(norms)
 
 kmax = math.inf; lmax = math.inf; step = 1
-#kmax = 2; lmax = 2; step = 1
+#kmax = 3; lmax = 3; step = 1
 
 
 
